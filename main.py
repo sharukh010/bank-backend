@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
 import models, schemas, services
@@ -7,6 +8,14 @@ from database import SessionLocal, engine
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Bank Backend API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # Dependency
@@ -54,7 +63,18 @@ def apply_loan(data: schemas.LoanApply, db: Session = Depends(get_db)):
     return services.apply_loan(db, data.account_id, data.amount)
 
 
-# 6. Check Balance
+# 6. Approve Loan
+@app.post("/loan/{loan_id}/approve")
+def approve_loan(loan_id: int, db: Session = Depends(get_db)):
+    result = services.approve_loan(db, loan_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Loan not found")
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
+
+
+# 7. Check Balance
 @app.get("/balance/{account_id}")
 def get_balance(account_id: int, db: Session = Depends(get_db)):
     return {"balance": services.get_balance(db, account_id)}
