@@ -1,71 +1,69 @@
-from sqlalchemy.orm import Session
-import models
+import database
 
 
-def create_account(db: Session, name: str):
-    account = models.Account(name=name)
-    db.add(account)
-    db.commit()
-    db.refresh(account)
+def create_account(name: str):
+    account = {
+        "id": database.account_id_seq,
+        "name": name,
+        "balance": 0.0
+    }
+    database.accounts.append(account)
+    database.account_id_seq += 1
     return account
 
 
-def deposit(db: Session, account_id: int, amount: float):
-    acc = db.query(models.Account).filter(models.Account.id == account_id).first()
-    acc.balance += amount
-    db.commit()
-    db.refresh(acc)
+def deposit(account_id: int, amount: float):
+    acc = next((a for a in database.accounts if a["id"] == account_id), None)
+    if not acc:
+        return None
+    acc["balance"] += amount
     return acc
 
 
-def withdraw(db: Session, account_id: int, amount: float):
-    acc = db.query(models.Account).filter(models.Account.id == account_id).first()
-    if acc.balance < amount:
+def withdraw(account_id: int, amount: float):
+    acc = next((a for a in database.accounts if a["id"] == account_id), None)
+    if not acc or acc["balance"] < amount:
         return None
-    acc.balance -= amount
-    db.commit()
-    db.refresh(acc)
+    acc["balance"] -= amount
     return acc
 
 
-def transfer(db: Session, from_acc: int, to_acc: int, amount: float):
-    sender = db.query(models.Account).filter(models.Account.id == from_acc).first()
-    receiver = db.query(models.Account).filter(models.Account.id == to_acc).first()
-
-    if sender.balance < amount:
+def transfer(from_account: int, to_account: int, amount: float):
+    sender = next((a for a in database.accounts if a["id"] == from_account), None)
+    receiver = next((a for a in database.accounts if a["id"] == to_account), None)
+    if not sender or not receiver or sender["balance"] < amount:
         return None
-
-    sender.balance -= amount
-    receiver.balance += amount
-    db.commit()
-    db.refresh(sender)
-    db.refresh(receiver)
+    sender["balance"] -= amount
+    receiver["balance"] += amount
     return {"from": sender, "to": receiver}
 
 
-def apply_loan(db: Session, account_id: int, amount: float):
-    loan = models.Loan(account_id=account_id, amount=amount)
-    db.add(loan)
-    db.commit()
-    db.refresh(loan)
+def apply_loan(account_id: int, amount: float):
+    loan = {
+        "id": database.loan_id_seq,
+        "account_id": account_id,
+        "amount": amount,
+        "status": "Pending"
+    }
+    database.loans.append(loan)
+    database.loan_id_seq += 1
     return loan
 
 
-def approve_loan(db: Session, loan_id: int):
-    loan = db.query(models.Loan).filter(models.Loan.id == loan_id).first()
+def approve_loan(loan_id: int):
+    loan = next((l for l in database.loans if l["id"] == loan_id), None)
     if not loan:
         return None
-    if loan.status == "Approved":
+    if loan["status"] == "Approved":
         return {"error": "Loan already approved"}
-    loan.status = "Approved"
-    acc = db.query(models.Account).filter(models.Account.id == loan.account_id).first()
-    acc.balance += loan.amount
-    db.commit()
-    db.refresh(loan)
-    db.refresh(acc)
+    loan["status"] = "Approved"
+    acc = next((a for a in database.accounts if a["id"] == loan["account_id"]), None)
+    acc["balance"] += loan["amount"]
     return {"loan": loan, "account": acc}
 
 
-def get_balance(db: Session, account_id: int):
-    acc = db.query(models.Account).filter(models.Account.id == account_id).first()
-    return acc.balance
+def get_balance(account_id: int):
+    acc = next((a for a in database.accounts if a["id"] == account_id), None)
+    if not acc:
+        return None
+    return acc["balance"]

@@ -1,11 +1,7 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
 
-import models, schemas, services
-from database import SessionLocal, engine
-
-models.Base.metadata.create_all(bind=engine)
+import schemas, services
 
 app = FastAPI(title="Bank Backend API")
 
@@ -18,40 +14,34 @@ app.add_middleware(
 )
 
 
-# Dependency
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
 # 1. Account Creation
 @app.post("/create-account")
-def create_account(data: schemas.AccountCreate, db: Session = Depends(get_db)):
-    return services.create_account(db, data.name)
+def create_account(data: schemas.AccountCreate):
+    return services.create_account(data.name)
 
 
 # 2. Deposit
 @app.post("/deposit")
-def deposit(data: schemas.Transaction, db: Session = Depends(get_db)):
-    return services.deposit(db, data.account_id, data.amount)
+def deposit(data: schemas.Transaction):
+    result = services.deposit(data.account_id, data.amount)
+    if not result:
+        raise HTTPException(status_code=404, detail="Account not found")
+    return result
 
 
 # 3. Withdraw
 @app.post("/withdraw")
-def withdraw(data: schemas.Transaction, db: Session = Depends(get_db)):
-    result = services.withdraw(db, data.account_id, data.amount)
+def withdraw(data: schemas.Transaction):
+    result = services.withdraw(data.account_id, data.amount)
     if not result:
-        raise HTTPException(status_code=400, detail="Insufficient balance")
+        raise HTTPException(status_code=400, detail="Insufficient balance or account not found")
     return result
 
 
 # 4. Transfer Money
 @app.post("/transfer")
-def transfer(data: schemas.Transfer, db: Session = Depends(get_db)):
-    result = services.transfer(db, data.from_account, data.to_account, data.amount)
+def transfer(data: schemas.Transfer):
+    result = services.transfer(data.from_account, data.to_account, data.amount)
     if not result:
         raise HTTPException(status_code=400, detail="Transfer failed")
     return result
@@ -59,14 +49,14 @@ def transfer(data: schemas.Transfer, db: Session = Depends(get_db)):
 
 # 5. Apply Loan
 @app.post("/loan")
-def apply_loan(data: schemas.LoanApply, db: Session = Depends(get_db)):
-    return services.apply_loan(db, data.account_id, data.amount)
+def apply_loan(data: schemas.LoanApply):
+    return services.apply_loan(data.account_id, data.amount)
 
 
 # 6. Approve Loan
 @app.post("/loan/{loan_id}/approve")
-def approve_loan(loan_id: int, db: Session = Depends(get_db)):
-    result = services.approve_loan(db, loan_id)
+def approve_loan(loan_id: int):
+    result = services.approve_loan(loan_id)
     if not result:
         raise HTTPException(status_code=404, detail="Loan not found")
     if "error" in result:
@@ -76,5 +66,8 @@ def approve_loan(loan_id: int, db: Session = Depends(get_db)):
 
 # 7. Check Balance
 @app.get("/balance/{account_id}")
-def get_balance(account_id: int, db: Session = Depends(get_db)):
-    return {"balance": services.get_balance(db, account_id)}
+def get_balance(account_id: int):
+    balance = services.get_balance(account_id)
+    if balance is None:
+        raise HTTPException(status_code=404, detail="Account not found")
+    return {"balance": balance}
